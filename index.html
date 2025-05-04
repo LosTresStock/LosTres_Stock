@@ -1,0 +1,161 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>LosTres</title>
+  <style>
+    body { background-color: #000; color: #fff; font-family: Arial, sans-serif; padding: 20px; }
+    h1 { color: #ff3c3c; font-size: 36px; margin-bottom: 30px; }
+    .producto { background: #fff; color: #000; padding: 20px; margin-bottom: 20px; max-width: 600px; }
+    .colores span { display: inline-block; width: 20px; height: 20px; border-radius: 50%; margin-right: 5px; border: 1px solid #000; }
+    .boton { background-color: #000; color: #fff; padding: 10px 15px; border: none; margin-top: 10px; margin-right: 10px; cursor: pointer; font-weight: bold; }
+    select, input { width: 100%; padding: 5px; margin: 5px 0 15px; }
+    .formulario { max-width: 600px; margin-bottom: 40px; }
+  </style>
+</head>
+<body>
+  <h1>LosTres</h1>
+  <div class="formulario">
+    <h3>Cargar nuevo producto</h3>
+    <input type="text" id="nombre" placeholder="Nombre del producto" />
+    <input type="text" id="precio" placeholder="Precio" />
+    <input type="text" id="categoria" placeholder="Categoría" />
+    <textarea id="descripcion" placeholder="Descripción"></textarea>
+    <button class="boton" onclick="crearTarjeta()">Generar Tarjeta</button>
+  </div>
+  <div id="contenedorTarjetas"></div>
+  <script>
+    function crearTarjeta() {
+      const nombre = document.getElementById('nombre').value.trim();
+      const precio = document.getElementById('precio').value.trim();
+      const categoria = document.getElementById('categoria').value.trim();
+      const descripcion = document.getElementById('descripcion').value.trim();
+      if (!nombre || !precio || !categoria || !descripcion) {
+        alert("Completá todos los campos.");
+        return;
+      }
+
+      const stock = {
+        Julio: { Negro: 2, Rojo: 3, Verde: 3, Amarillo: 2 },
+        Fabián: { Negro: 2, Rojo: 3, Verde: 3 },
+        Marcelo: { Negro: 2, Rojo: 3 }
+      };
+
+      const id = "p_" + Date.now();
+      const div = document.createElement("div");
+      div.className = "producto";
+      div.id = id;
+      div.dataset.stock = JSON.stringify(stock);
+      div.innerHTML = `
+        <h2>${nombre} <b>$${precio}</b>
+          <span class="colores">
+            <span style="background:black;" data-color="Negro"></span>
+            <span style="background:red;" data-color="Rojo"></span>
+            <span style="background:lime;" data-color="Verde"></span>
+            <span style="background:yellow;" data-color="Amarillo"></span>
+          </span>
+        </h2>
+        <p><strong>Categoría:</strong> ${categoria}</p>
+        <ul id="${id}_stock"></ul>
+        <p><strong>Descripción:</strong> ${descripcion}</p>
+        <label>Color:</label>
+        <select id="${id}_color">
+          <option value="Negro">Negro</option>
+          <option value="Rojo">Rojo</option>
+          <option value="Verde">Verde</option>
+          <option value="Amarillo">Amarillo</option>
+        </select>
+        <label>Ubicación:</label>
+        <select id="${id}_ubicacion">
+          <option value="Julio">Julio</option>
+          <option value="Fabián">Fabián</option>
+          <option value="Marcelo">Marcelo</option>
+        </select>
+        <input type="number" id="${id}_cantidad" placeholder="Cantidad" min="1" />
+        <button class="boton" onclick="modificarStock('${id}', -1)">Vender</button>
+        <button class="boton" onclick="modificarStock('${id}', 1)">Sumar</button>
+        <button class="boton" onclick="enviarWhatsApp('${id}')">Enviar por WhatsApp</button>
+      `;
+      document.getElementById('contenedorTarjetas').appendChild(div);
+      actualizarStock(id);
+
+      // Enviar a Google Sheets
+      fetch("https://script.google.com/macros/s/AKfycbz7eaF3sYLFDuTi5hxw-dXl2t1Fwcpk8amesijH2-lz7UbXt_vvxecs9lAQVyX4S0i3/exec", {
+        method: "POST",
+        body: JSON.stringify({
+          nombre: nombre,
+          precio: precio,
+          categoria: categoria,
+          descripcion: descripcion
+        }),
+        headers: {
+          "Content-Type": "application/json"
+        }
+      });
+    }
+
+    function modificarStock(id, factor) {
+      const tarjeta = document.getElementById(id);
+      const stock = JSON.parse(tarjeta.dataset.stock);
+      const color = document.getElementById(`${id}_color`).value;
+      const ubicacion = document.getElementById(`${id}_ubicacion`).value;
+      const cantidad = parseInt(document.getElementById(`${id}_cantidad`).value);
+      if (isNaN(cantidad) || cantidad <= 0) {
+        alert("Ingresá una cantidad válida.");
+        return;
+      }
+      if (!stock[ubicacion][color]) stock[ubicacion][color] = 0;
+      stock[ubicacion][color] += factor * cantidad;
+      if (stock[ubicacion][color] < 0) stock[ubicacion][color] = 0;
+      tarjeta.dataset.stock = JSON.stringify(stock);
+      actualizarStock(id);
+    }
+
+    function actualizarStock(id) {
+      const tarjeta = document.getElementById(id);
+      const stock = JSON.parse(tarjeta.dataset.stock);
+      const lista = document.getElementById(`${id}_stock`);
+      lista.innerHTML = '';
+      for (const ubic in stock) {
+        const colores = Object.entries(stock[ubic])
+          .filter(([, c]) => c > 0)
+          .map(([col, c]) => `${col} (${c})`).join(', ');
+        lista.innerHTML += `<li><b>Stock</b> ${ubic}: ${colores || '-'}</li>`;
+      }
+      const puntos = tarjeta.querySelectorAll('.colores span');
+      const sumaPorColor = { Negro: 0, Rojo: 0, Verde: 0, Amarillo: 0 };
+      for (const ub in stock) {
+        for (const col in stock[ub]) {
+          if (sumaPorColor[col] !== undefined) sumaPorColor[col] += stock[ub][col];
+        }
+      }
+      puntos.forEach(punto => {
+        const nombre = punto.dataset.color;
+        punto.style.display = sumaPorColor[nombre] > 0 ? 'inline-block' : 'none';
+      });
+    }
+
+    function enviarWhatsApp(id) {
+      const tarjeta = document.getElementById(id);
+      const nombre = tarjeta.querySelector('h2').textContent.split(' $')[0].trim();
+      const precio = tarjeta.querySelector('h2').textContent.split('$')[1].split('\n')[0].trim();
+      const descripcion = tarjeta.querySelector('p:nth-of-type(2)').textContent.replace('Descripción:', '').trim();
+      const stock = JSON.parse(tarjeta.dataset.stock);
+      const coloresDisponibles = new Set();
+      for (const ubic in stock) {
+        for (const color in stock[ubic]) {
+          if (stock[ubic][color] > 0) {
+            coloresDisponibles.add(color);
+          }
+        }
+      }
+      const coloresTexto = [...coloresDisponibles].join(', ') || 'Ninguno';
+      const mensaje = `📦 ${nombre}\n💲 $${precio}\n🎨 Colores disponibles: ${coloresTexto}\n📝 ${descripcion}`;
+      const url = "https://wa.me/?text=" + encodeURIComponent(mensaje);
+      window.open(url, "_blank");
+    }
+  </script>
+</body>
+</html>
